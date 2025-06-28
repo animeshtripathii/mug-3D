@@ -3,7 +3,7 @@
 import ImageEditor from './components/editor/ImageEditor'
 import LandingPage from './components/LandingPage'
 import { Canvas, useThree } from '@react-three/fiber'
-import { useGLTF, OrbitControls, VRButton } from '@react-three/drei'
+import { useGLTF, OrbitControls } from '@react-three/drei'
 import { useState, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { FaCube, FaEdit, FaCheckCircle, FaArrowLeft, FaMobileAlt } from 'react-icons/fa'
@@ -51,20 +51,43 @@ function ModelMug({ texture, ...props }) {
 
 // AR Scene Component
 function ARScene({ texture }) {
-  const { scene } = useThree()
+  const { gl, scene, camera } = useThree()
   
   useEffect(() => {
+    if (!gl.xr) return;
+
     // Enable WebXR
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.xr.enabled = true;
-    
-    // Add VR support
-    document.body.appendChild(VRButton.createButton(renderer));
-    
-    return () => {
-      renderer.dispose();
+    gl.xr.enabled = true;
+
+    // Set up AR session
+    const startAR = async () => {
+      if (navigator.xr) {
+        try {
+          const session = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['hit-test'],
+            optionalFeatures: ['dom-overlay'],
+          });
+          
+          await gl.xr.setSession(session);
+          
+          session.addEventListener('end', () => {
+            gl.xr.setSession(null);
+          });
+        } catch (error) {
+          console.error('Error starting AR session:', error);
+        }
+      }
     };
-  }, []);
+
+    // Start AR when component mounts
+    startAR();
+
+    return () => {
+      if (gl.xr.getSession()) {
+        gl.xr.getSession().end();
+      }
+    };
+  }, [gl.xr]);
 
   return (
     <>
@@ -77,7 +100,7 @@ function ARScene({ texture }) {
         texture={texture}
       />
     </>
-  );
+  )
 }
 
 export default function Home() {
@@ -279,6 +302,12 @@ export default function Home() {
                     far: 1000
                   }}
                   style={{ background: showAR ? 'transparent' : '#f8fafc' }}
+                  gl={{ alpha: true, antialias: true }}
+                  onCreated={({ gl }) => {
+                    if (showAR) {
+                      gl.xr.enabled = true;
+                    }
+                  }}
                 >
                   {!showAR && <color attach="background" args={['#f8fafc']} />}
                   {showAR ? (
