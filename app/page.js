@@ -2,8 +2,8 @@
 
 import ImageEditor from './components/editor/ImageEditor'
 import LandingPage from './components/LandingPage'
-import { Canvas } from '@react-three/fiber'
-import { useGLTF, OrbitControls } from '@react-three/drei'
+import { Canvas, useThree } from '@react-three/fiber'
+import { useGLTF, OrbitControls, VRButton } from '@react-three/drei'
 import { useState, useEffect, useRef } from 'react'
 import * as THREE from 'three'
 import { FaCube, FaEdit, FaCheckCircle, FaArrowLeft, FaMobileAlt } from 'react-icons/fa'
@@ -51,6 +51,21 @@ function ModelMug({ texture, ...props }) {
 
 // AR Scene Component
 function ARScene({ texture }) {
+  const { scene } = useThree()
+  
+  useEffect(() => {
+    // Enable WebXR
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.xr.enabled = true;
+    
+    // Add VR support
+    document.body.appendChild(VRButton.createButton(renderer));
+    
+    return () => {
+      renderer.dispose();
+    };
+  }, []);
+
   return (
     <>
       <ambientLight intensity={1} />
@@ -62,7 +77,7 @@ function ARScene({ texture }) {
         texture={texture}
       />
     </>
-  )
+  );
 }
 
 export default function Home() {
