@@ -4,9 +4,10 @@ import ImageEditor from './components/editor/ImageEditor'
 import LandingPage from './components/LandingPage'
 import { Canvas, useThree } from '@react-three/fiber'
 import { useGLTF, OrbitControls } from '@react-three/drei'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useRef as useCanvasRef } from 'react'
 import * as THREE from 'three'
 import { FaCube, FaEdit, FaCheckCircle, FaArrowLeft, FaMobileAlt } from 'react-icons/fa'
+import ARQRModal from './components/ARQRModal'
 
 function ModelMug({ texture, ...props }) {
   const { nodes, materials } = useGLTF('/mug/scene.gltf')
@@ -108,8 +109,10 @@ export default function Home() {
   const [showEditor, setShowEditor] = useState(false)
   const [editedImage, setEditedImage] = useState(null)
   const [uploadedTexture, setUploadedTexture] = useState(null)
-  const [showAR, setShowAR] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [arURL, setARURL] = useState('')
   const imageEditorRef = useRef();
+  const canvasRef = useCanvasRef();
 
   const handleImageEdit = (imageUrl) => {
     setEditedImage(imageUrl)
@@ -159,25 +162,43 @@ export default function Home() {
   };
 
   const handleToggleAR = async () => {
-    if (!showAR) {
-      // Check if WebXR is supported
-      if ('xr' in navigator) {
-        try {
-          const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
-          if (isSupported) {
-            setShowAR(true);
-          } else {
-            alert('AR is not supported on your device');
-          }
-        } catch (error) {
-          console.error('Error checking AR support:', error);
-          alert('Failed to initialize AR. Please make sure you\'re using a compatible device and browser.');
+    if (!showQRModal) {
+      try {
+        // Get the canvas
+        const canvas = document.querySelector('canvas');
+        if (!canvas) {
+          throw new Error('Canvas not found');
         }
-      } else {
-        alert('WebXR is not supported in your browser');
+
+        // Create a simple URL for testing
+        const testUrl = `${window.location.origin}/ar/test`;
+        console.log('Using test URL:', testUrl);
+
+        // Generate AR URL through our API
+        const response = await fetch('/api/ar-url', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ imageUrl: testUrl }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to generate AR URL');
+        }
+
+        const data = await response.json();
+        console.log('AR URL generated:', data.url);
+        setARURL(data.url);
+        setShowQRModal(true);
+      } catch (error) {
+        console.error('Error preparing AR view:', error);
+        alert('Failed to prepare AR view: ' + error.message);
       }
     } else {
-      setShowAR(false);
+      setShowQRModal(false);
+      setARURL('');
     }
   };
 
@@ -212,7 +233,7 @@ export default function Home() {
                 }`}
                 onClick={() => {
                   setShowPreview(false);
-                  setShowAR(false);
+                  setShowQRModal(false);
                 }}
               >
                 <FaEdit className="inline-block w-4 h-4 mr-2" />
@@ -263,29 +284,27 @@ export default function Home() {
                 <button
                   onClick={() => {
                     setShowPreview(false);
-                    setShowAR(false);
+                    setShowQRModal(false);
                   }}
                   className="btn btn-secondary"
                 >
                   <FaArrowLeft className="w-4 h-4 mr-2" />
                   Back to Editor
                 </button>
-                {!showAR && (
-                  <button
-                    onClick={handleToggleAR}
-                    className="btn btn-primary"
-                  >
-                    <FaMobileAlt className="w-4 h-4 mr-2" />
-                    View in AR
-                  </button>
-                )}
+                <button
+                  onClick={handleToggleAR}
+                  className="btn btn-primary"
+                >
+                  <FaMobileAlt className="w-4 h-4 mr-2" />
+                  View in AR
+                </button>
               </div>
               <div className="mt-4 space-y-2">
                 <p className="text-xs font-medium text-gray-600 uppercase tracking-wider">
-                  {showAR ? 'AR MODE' : '3D PREVIEW MODE'}
+                  {showQRModal ? 'QR CODE' : '3D PREVIEW MODE'}
                 </p>
                 <p className="text-sm text-gray-500">
-                  {showAR ? 'Look around to place the mug' : 'Rotate to view all angles'}
+                  {showQRModal ? 'Scan QR code to view in AR' : 'Rotate to view all angles'}
                 </p>
               </div>
             </div>
@@ -294,6 +313,7 @@ export default function Home() {
             <div className="w-full h-full flex items-center justify-center p-12">
               <div className="w-full h-[calc(100vh-160px)] min-h-[600px] bg-white rounded-2xl shadow-2xl overflow-hidden">
                 <Canvas
+                  ref={canvasRef}
                   shadows
                   camera={{
                     position: [16, 8, 16],
@@ -301,49 +321,41 @@ export default function Home() {
                     near: 0.1,
                     far: 1000
                   }}
-                  style={{ background: showAR ? 'transparent' : '#f8fafc' }}
-                  gl={{ alpha: true, antialias: true }}
-                  onCreated={({ gl }) => {
-                    if (showAR) {
-                      gl.xr.enabled = true;
-                    }
+                  style={{ background: '#f8fafc' }}
+                  gl={{
+                    preserveDrawingBuffer: true,
+                    antialias: true
                   }}
                 >
-                  {!showAR && <color attach="background" args={['#f8fafc']} />}
-                  {showAR ? (
-                    <ARScene texture={uploadedTexture} />
-                  ) : (
-                    <>
-                      <ambientLight intensity={1} />
-                      <directionalLight
-                        position={[10, 10, 10]}
-                        intensity={1}
-                        castShadow
-                        shadow-mapSize={[2048, 2048]}
-                      />
-                      <directionalLight
-                        position={[-10, -10, -10]}
-                        intensity={0.2}
-                      />
-                      <ModelMug 
-                        position={[0, 0, 0]} 
-                        rotation={[0, Math.PI / 4, 0]}
-                        texture={uploadedTexture}
-                      />
-                      <OrbitControls
-                        enableZoom={true}
-                        enablePan={true}
-                        enableRotate={true}
-                        minDistance={10}
-                        maxDistance={30}
-                        rotateSpeed={1}
-                        target={[0, 0, 0]}
-                        maxPolarAngle={Math.PI / 1.5}
-                        minPolarAngle={Math.PI / 6}
-                      />
-                      <gridHelper args={[40, 40, '#e2e8f0', '#e2e8f0']} position={[0, -4, 0]} />
-                    </>
-                  )}
+                  <color attach="background" args={['#f8fafc']} />
+                  <ambientLight intensity={1} />
+                  <directionalLight
+                    position={[10, 10, 10]}
+                    intensity={1}
+                    castShadow
+                    shadow-mapSize={[2048, 2048]}
+                  />
+                  <directionalLight
+                    position={[-10, -10, -10]}
+                    intensity={0.2}
+                  />
+                  <ModelMug 
+                    position={[0, 0, 0]} 
+                    rotation={[0, Math.PI / 4, 0]}
+                    texture={uploadedTexture}
+                  />
+                  <OrbitControls
+                    enableZoom={true}
+                    enablePan={true}
+                    enableRotate={true}
+                    minDistance={10}
+                    maxDistance={30}
+                    rotateSpeed={1}
+                    target={[0, 0, 0]}
+                    maxPolarAngle={Math.PI / 1.5}
+                    minPolarAngle={Math.PI / 6}
+                  />
+                  <gridHelper args={[40, 40, '#e2e8f0', '#e2e8f0']} position={[0, -4, 0]} />
                 </Canvas>
               </div>
             </div>
@@ -351,6 +363,13 @@ export default function Home() {
         ) : (
           <ImageEditor ref={imageEditorRef} onImageEdit={handleImageEdit} />
         )}
+
+        {/* AR QR Code Modal */}
+        <ARQRModal
+          isOpen={showQRModal}
+          onClose={() => setShowQRModal(false)}
+          arURL={arURL}
+        />
       </div>
     </main>
   )
