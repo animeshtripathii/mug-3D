@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
-import { useGLTF } from '@react-three/drei';
+import { OrbitControls, useGLTF } from '@react-three/drei';
 import * as THREE from 'three';
 
 function ModelMug({ texture, ...props }) {
@@ -44,6 +44,11 @@ function ModelMug({ texture, ...props }) {
       </group>
     </group>
   );
+}
+
+export async function generateStaticParams() {
+  // Add all IDs you want to statically generate
+  return [{ id: 'test' }]
 }
 
 export default function ARPage({ params, searchParams }) {
@@ -114,10 +119,23 @@ export default function ARPage({ params, searchParams }) {
           gl.xr.enabled = true;
         }}
       >
+        <color attach="background" args={['#f8fafc']} />
         <ambientLight intensity={1} />
-        <pointLight position={[10, 10, 10]} />
+        <directionalLight position={[10, 10, 10]} intensity={1} castShadow shadow-mapSize={[2048, 2048]} />
+        <directionalLight position={[-10, -10, -10]} intensity={0.2} />
         <ModelMug texture={texture} position={[0, 0, -2]} />
+        <OrbitControls
+          enableZoom={true}
+          enablePan={true}
+          enableRotate={true}
+          minDistance={10}
+          maxDistance={30}
+          rotateSpeed={1}
+          target={[0, 0, 0]}
+          maxPolarAngle={Math.PI / 1.5}
+          minPolarAngle={Math.PI / 6}
+        />
       </Canvas>
     </div>
   );
-} 
+}
