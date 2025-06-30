@@ -1,4 +1,3 @@
-'use client';
 
 import { useEffect, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
